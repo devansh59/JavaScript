@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        #btn{
+            padding: 10px 14px;
+            background-color: red;
+            color: aliceblue;
+            border: 2px solid black;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Onclick Event</h1>
+    <div id="para">
+        <p>
+            Hello Everyone...<br>
+            Welcome to my JS code.<br> 
+            It is all about JS Events<br>
+            In this we will see show and hide events..<br>
+        </p>
+    </div>
+    <button id="btn" onclick="toggelhide()">Show/Hide</button>
+    <script>
+        function toggelhide(){
+            let para = document.getElementById("para");
+            let btn = document.getElementById("btn");
+
+            if(para.style.display != 'none'){
+                para.style.display = 'none'
+            }
+            else{
+                para.style.display = 'block'
+            }
+          
+        }
+    </script>
+
+    <br>
+    <h1>mouseover/out</h1>
+
+    <script>
+        let para = document.getElementById("para");
+        para.addEventListener('mouseover',function run(){
+            alert("Cursor inside")
+        });
+
+        para.addEventListener('mouseout',function run(){
+            alert("cursor outside")
+        })
+    </script>
+    
+</body>
+</html>
