@@ -11,73 +11,83 @@ const PRODUCT_CODE_MAP = {
   'MPGI3000': 'Gut & Immunity+30gm',
   'MPGI100': 'Gut & Immunity+100gm',
   'MPPR1200': 'Protect',
-  'MPLM3000': 'Lean Mass+',
+  'MPPR1GL': 'Protect',  // Protect 1 Gal → maps to "Protect"
+  'MPLM3000': 'Lean Mass+30gm',
   'MPJD3000': 'Joint & Mobility+30gm',
   'MPFC3000': 'Focus & Calm 30gm',
-  'MPPK3000': 'Puppy/Kitten',
+  'MPPK3000': 'Puppy/Kitten 30gm',
   'MPNBO240': "Nature's BugOff"
 };
 
 // ===== ITEM NAME MAPPING (for items without product codes) =====
 const ITEM_NAME_MAP = {
-  // Gut & Immunity variations
-  'Gut (Allergies) & Immunity +': 'Gut & Immunity+',
-  'Gut (Allergies) & Immunity': 'Gut & Immunity+',
-  'Gut & Immunity+': 'Gut & Immunity+',
-  'Gut & Immunity +': 'Gut & Immunity+',
-  'Gut & Immunity': 'Gut & Immunity+',
-  'Allergies & Immunity': 'Gut & Immunity+',
-  'Allergies & Immunity - Canine': 'Gut & Immunity+',
-  'Aller-G & Immunity': 'Gut & Immunity+',
+  // ===== GUT & IMMUNITY VARIATIONS (All map to standardized names) =====
+  // 30gm variations
+  'Gut & Immunity+': 'Gut & Immunity+30gm',
+  'Gut & Immunity +': 'Gut & Immunity+30gm',
+  'Gut & Immunity': 'Gut & Immunity+30gm',
+  'Gut (Allergies) & Immunity +': 'Gut & Immunity+30gm',
+  'Gut (Allergies) & Immunity': 'Gut & Immunity+30gm',
+  'Allergies & Immunity': 'Gut & Immunity+30gm',
+  'Allergies & Immunity - Canine': 'Gut & Immunity+30gm',
+  'Aller-G & Immunity': 'Gut & Immunity+30gm',
+  
+  // 100gm variations
   'Gut & Immunity+ 500g': 'Gut & Immunity+100gm',
   'Gut & Immunity + 500g': 'Gut & Immunity+100gm',
   'Gut & Immunity - 120g': 'Gut & Immunity+100gm',
   'G&I 100g': 'Gut & Immunity+100gm',
   
-  // Joint & Mobility variations
-  'Joint & Mobility+': 'Joint & Mobility+',
-  'Joint & Mobility +': 'Joint & Mobility+',
-  'Joint & Mobililty+ (Recovery)': 'Joint & Mobility+',
-  'Joints & Repair': 'Joint & Mobility+',
-  'Joints & Recovery': 'Joint & Mobility+',
-  'Joints & Recovery - Canine': 'Joint & Mobility+',
-  'Joint & Detox (Recovery)': 'Joint & Mobility+',
-  'Joint & Detox': 'Joint & Mobility+',
+  // ===== JOINT & MOBILITY VARIATIONS (All map to 30gm) =====
+  'Joint & Mobility+': 'Joint & Mobility+30gm',
+  'Joint & Mobility +': 'Joint & Mobility+30gm',
+  'Joint & Mobililty+ (Recovery)': 'Joint & Mobility+30gm',
+  'Joints & Repair': 'Joint & Mobility+30gm',
+  'Joints & Recovery': 'Joint & Mobility+30gm',
+  'Joints & Recovery - Canine': 'Joint & Mobility+30gm',
+  'Joint & Detox (Recovery)': 'Joint & Mobility+30gm',
+  'Joint & Detox': 'Joint & Mobility+30gm',
+  
+  // Larger sizes
   'Joint & Mobility+ 500g': 'Joint & Mobility+500gm',
   'Joint & Mobility+ 600g': 'Joint & Mobility+600gm',
   
-  // Protect variations
+  // ===== PROTECT VARIATIONS (All map to just "Protect") =====
   'PROTECT': 'Protect',
   'PROTECT - Disinfectant': 'Protect',
   'Free PROTECT': 'Protect',
   
-  // Lean Mass variations (CANINE ONLY - Equine excluded below)
-  'Lean Mass+': 'Lean Mass+',
-  'Lean Mass +': 'Lean Mass+',
-  'Lean Mass': 'Lean Mass+',
-  'Lean Mass - Canine': 'Lean Mass+',
+  // ===== LEAN MASS VARIATIONS (CANINE ONLY - 30gm default) =====
+  'Lean Mass+': 'Lean Mass+30gm',
+  'Lean Mass +': 'Lean Mass+30gm',
+  'Lean Mass': 'Lean Mass+30gm',
+  'Lean Mass - Canine': 'Lean Mass+30gm',
+  
+  // Larger sizes
   'Lean Mass+ 100g': 'Lean Mass+100gm',
   'Lean Mass - 100g': 'Lean Mass+100gm',
   
-  // Focus & Calm variations (CANINE ONLY - Equine excluded below)
-  'Focus & Calm': 'Focus & Calm',
-  'Focus & Calm (replace GI)': 'Focus & Calm',
-  'Calm & Focused': 'Focus & Calm',
-  'Calming+': 'Focus & Calm',
-  'Calming': 'Focus & Calm',
-  'Calming - Canine': 'Focus & Calm',
+  // ===== FOCUS & CALM VARIATIONS (All map to 30gm) =====
+  'Focus & Calm': 'Focus & Calm 30gm',
+  'Focus & Calm (replace GI)': 'Focus & Calm 30gm',
+  'Calm & Focused': 'Focus & Calm 30gm',
+  'Calming+': 'Focus & Calm 30gm',
+  'Calming': 'Focus & Calm 30gm',
+  'Calming - Canine': 'Focus & Calm 30gm',
   
-  // Puppy/Kitten variations
-  'Puppy/Kitten Formula': 'Puppy/Kitten',
-  'Puppy Formula': 'Puppy/Kitten',
+  // ===== PUPPY/KITTEN VARIATIONS (All map to 30gm) =====
+  'Puppy/Kitten Formula': 'Puppy/Kitten 30gm',
+  'Puppy Formula': 'Puppy/Kitten 30gm',
+  
+  // Larger sizes
   'Puppy/Kitten 100g': 'Puppy/Kitten 100gm',
   
-  // Nature's BugOff variations
+  // ===== NATURE'S BUGOFF VARIATIONS =====
   "Nature's BugOff": "Nature's BugOff",
-  "Nature's BugOff 1 Gal": "Nature's BugOff 1 Gal",
+  "Nature's BugOff 1 Gal": "Nature's BugOff 1 Gal",  // SEPARATE PRODUCT
   
-  // Other products (non-core)
-  'Myco Pet Gift Card': 'Gift Card',
+  // ===== EXCLUDE: GIFT CARDS =====
+  'Myco Pet Gift Card': 'EXCLUDE',
   
   // ===== EXCLUDE: BLACK SOLDIER FLY PRODUCTS =====
   'Black Soldier Fly - Oil': 'EXCLUDE',
