@@ -1,137 +1,238 @@
-// ===== CONFIGURATION =====
-const RAW_SHEET_NAME = 'Raw Data';
-const CLEANED_SHEET_NAME = 'Cleaned Data';
-
-// Test order identification (customize these)
-const TEST_EMAILS = ['test@example.com', 'demo@myco.pet']; // Add test emails
-const TEST_CUSTOMER_NAMES = ['Test Customer', 'Demo User']; // Add test names
-
-// ===== MAIN CLEANING FUNCTION =====
+// ===== UPDATED MAIN CLEANING FUNCTION WITH FALLBACK =====
 function cleanShopifyData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const rawSheet = ss.getSheetByName(RAW_SHEET_NAME);
-  const cleanedSheet = ss.getSheetByName(CLEANED_SHEET_NAME);
-  
-  // Get all data from raw sheet
-  const rawData = rawSheet.getDataRange().getValues();
-  
-  if (rawData.length <= 1) {
-    Logger.log('No data to clean');
-    return;
-  }
-  
-  // Get headers (first row)
-  const headers = rawData[0];
-  
-  // Find column indices
-  const colIndices = {
-    id: headers.indexOf('ID'),
-    email: headers.indexOf('Email'),
-    customerName: headers.indexOf('Customer Name'),
-    total: headers.indexOf('Order total'),
-    date: headers.indexOf('Date')
-  };
-  
-  // Clean data array (start with headers)
-  const cleanedData = [headers];
-  const seenOrderIds = new Set();
-  
-  // Process each row (skip header)
-  for (let i = 1; i < rawData.length; i++) {
-    const row = rawData[i];
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const rawSheet = ss.getSheetByName(RAW_SHEET_NAME);
+    const cleanedSheet = ss.getSheetByName(CLEANED_SHEET_NAME);
     
-    // Skip if row is completely empty
-    if (row.every(cell => cell === '' || cell === null)) {
-      continue;
+    if (!rawSheet || !cleanedSheet) {
+      Logger.log('Error: Required sheets not found');
+      return;
     }
     
-    // CLEANING RULE 1: Remove duplicate orders
-    const orderId = row[colIndices.id];
-    if (seenOrderIds.has(orderId)) {
-      Logger.log(`Skipping duplicate order: ${orderId}`);
-      continue;
-    }
-    seenOrderIds.add(orderId);
+    const rawData = rawSheet.getDataRange().getValues();
     
-    // CLEANING RULE 2: Remove test orders
-    const email = row[colIndices.email];
-    const customerName = row[colIndices.customerName];
-    
-    if (TEST_EMAILS.includes(email) || TEST_CUSTOMER_NAMES.includes(customerName)) {
-      Logger.log(`Skipping test order: ${orderId}`);
-      continue;
+    if (rawData.length <= 1) {
+      Logger.log('No data to clean');
+      return;
     }
     
-    // CLEANING RULE 3: Remove $0 orders
-    const total = parseFloat(row[colIndices.total]) || 0;
-    if (total === 0) {
-      Logger.log(`Skipping $0 order: ${orderId}`);
-      continue;
-    }
+    // Headers
+    const headers = rawData[0];
     
-    // CLEANING RULE 4: Clean each cell in the row
-    const cleanedRow = row.map((cell, index) => {
-      // Trim whitespace from text
-      if (typeof cell === 'string') {
-        cell = cell.trim();
+    // Find column indices
+    const colIndices = {
+      id: headers.indexOf('ID'),
+      items: headers.indexOf('Items'),
+      customerName: headers.indexOf('Customer Name'),
+      shippingAddress: headers.indexOf('Shipping address'),
+      orderTotal: headers.indexOf('Order total'),
+      date: headers.indexOf('Date'),
+      email: headers.indexOf('Email'),
+      subtotal: headers.indexOf('Subtotal'),
+      discount: headers.indexOf('Discount'),
+      productCode: headers.indexOf('Product code')
+    };
+    
+    // New headers with Product Code column
+    const newHeaders = [
+      'Order ID',
+      'Product Code',
+      'Product Name',
+      'Product Price',
+      'Quantity',
+      'Customer Name',
+      'City',
+      'Province',
+      'Country',
+      'Order Total',
+      'Order Date',
+      'Email',
+      'Subtotal',
+      'Discount Amount',
+      'Discount Type'
+    ];
+    
+    const cleanedData = [newHeaders];
+    const seenOrderIds = new Set();
+    let stats = {
+      duplicates: 0,
+      testOrders: 0,
+      zeroOrders: 0,
+      emptyRows: 0,
+      invalidProducts: 0,
+      usedFallback: 0,
+      processed: 0
+    };
+    
+    // Track current order details for multi-line items
+    let currentOrder = null;
+    
+    // Process each row
+    for (let i = 1; i < rawData.length; i++) {
+      const row = rawData[i];
+      
+      // Check if this is a new order (has Order ID)
+      const orderId = String(row[colIndices.id] || '').trim();
+      const items = String(row[colIndices.items] || '').trim();
+      const customerName = String(row[colIndices.customerName] || '').trim();
+      const email = String(row[colIndices.email] || '').trim().toLowerCase();
+      const productCode = String(row[colIndices.productCode] || '').trim();
+      
+      // Skip completely empty rows
+      if (!orderId && !items && !customerName) {
+        stats.emptyRows++;
+        continue;
+      }
+      
+      // If this row has an Order ID, it's a new order
+      if (orderId) {
+        // Check for test orders
+        let isTestOrder = false;
+        for (let testEmail of TEST_EMAILS) {
+          if (email.includes(testEmail.toLowerCase())) {
+            isTestOrder = true;
+            break;
+          }
+        }
+        for (let testName of TEST_CUSTOMER_NAMES) {
+          if (customerName.toLowerCase().includes(testName.toLowerCase())) {
+            isTestOrder = true;
+            break;
+          }
+        }
         
-        // Proper case for customer names
-        if (index === colIndices.customerName && cell) {
-          cell = toProperCase(cell);
+        if (isTestOrder) {
+          stats.testOrders++;
+          currentOrder = null;
+          continue;
         }
+        
+        // Check for $0 orders
+        const totalStr = String(row[colIndices.orderTotal] || '').replace(/[^0-9.-]/g, '');
+        const total = parseFloat(totalStr) || 0;
+        
+        if (total === 0) {
+          stats.zeroOrders++;
+          currentOrder = null;
+          continue;
+        }
+        
+        // Check for duplicates
+        if (seenOrderIds.has(orderId)) {
+          stats.duplicates++;
+          currentOrder = null;
+          continue;
+        }
+        seenOrderIds.add(orderId);
+        
+        // Store current order details
+        currentOrder = {
+          id: orderId,
+          customerName: cleanCustomerName(customerName),
+          address: parseAddress(String(row[colIndices.shippingAddress] || '')),
+          total: cleanCurrency(String(row[colIndices.orderTotal] || '')),
+          date: cleanDate(row[colIndices.date]),
+          email: email,
+          subtotal: cleanCurrency(String(row[colIndices.subtotal] || '')),
+          discount: parseDiscount(String(row[colIndices.discount] || ''))
+        };
       }
       
-      // Format dates consistently
-      if (index === colIndices.date && cell) {
-        if (cell instanceof Date) {
-          cell = Utilities.formatDate(cell, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+      // Process items (works for both first row and continuation rows)
+      if (items && currentOrder) {
+        
+        let finalProductCode = productCode;
+        let finalProductName = '';
+        
+        // ===== STRATEGY: Use product code if available, fallback to item name =====
+        if (productCode && PRODUCT_CODE_MAP[productCode]) {
+          // Product code exists and is mapped
+          finalProductName = PRODUCT_CODE_MAP[productCode];
+        } else {
+          // No product code OR unmapped code - use item name as fallback
+          const itemDetails = parseItem(items);
+          finalProductCode = productCode || 'NO_CODE';
+          finalProductName = itemDetails.productName;
+          stats.usedFallback++;
         }
+        
+        const itemDetails = parseItem(items);
+        
+        const cleanedRow = [
+          currentOrder.id,
+          finalProductCode,
+          finalProductName,
+          itemDetails.price,
+          itemDetails.quantity,
+          currentOrder.customerName,
+          currentOrder.address.city,
+          currentOrder.address.province,
+          currentOrder.address.country,
+          currentOrder.total,
+          currentOrder.date,
+          currentOrder.email,
+          currentOrder.subtotal,
+          currentOrder.discount.amount,
+          currentOrder.discount.type
+        ];
+        
+        cleanedData.push(cleanedRow);
+        stats.processed++;
+      }
+    }
+    
+    // Write to cleaned sheet
+    cleanedSheet.clear();
+    
+    if (cleanedData.length > 0) {
+      cleanedSheet.getRange(1, 1, cleanedData.length, cleanedData[0].length)
+        .setValues(cleanedData);
+      
+      // Format header
+      cleanedSheet.getRange(1, 1, 1, newHeaders.length)
+        .setFontWeight('bold')
+        .setBackground('#4CAF50')
+        .setFontColor('#FFFFFF');
+      
+      cleanedSheet.setFrozenRows(1);
+      
+      // Auto-resize columns
+      for (let i = 1; i <= newHeaders.length; i++) {
+        cleanedSheet.autoResizeColumn(i);
       }
       
-      return cell;
-    });
+      const summary = `
+✅ CLEANING COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Total rows processed: ${stats.processed}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🗑️ Removed:
+   • Duplicates: ${stats.duplicates}
+   • Test orders: ${stats.testOrders}
+   • Zero-value: ${stats.zeroOrders}
+   • Empty rows: ${stats.emptyRows}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Mapped products: ${stats.processed - stats.usedFallback}
+⚠️ Used item name fallback: ${stats.usedFallback}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      `;
+      
+      Logger.log(summary);
+      
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        `Processed ${stats.processed} items (${stats.usedFallback} used fallback names)`,
+        '✅ Data Cleaned',
+        5
+      );
+    }
     
-    cleanedData.push(cleanedRow);
+  } catch (error) {
+    Logger.log('ERROR: ' + error.toString());
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Error: ' + error.toString(),
+      '❌ Cleaning Failed',
+      10
+    );
   }
-  
-  // Clear cleaned sheet and write new data
-  cleanedSheet.clear();
-  
-  if (cleanedData.length > 0) {
-    cleanedSheet.getRange(1, 1, cleanedData.length, cleanedData[0].length)
-      .setValues(cleanedData);
-    
-    // Format header row
-    cleanedSheet.getRange(1, 1, 1, headers.length)
-      .setFontWeight('bold')
-      .setBackground('#4CAF50')
-      .setFontColor('#FFFFFF');
-    
-    // Freeze header row
-    cleanedSheet.setFrozenRows(1);
-    
-    Logger.log(`Cleaned ${cleanedData.length - 1} orders (removed ${rawData.length - cleanedData.length} rows)`);
-  }
-}
-
-// ===== HELPER FUNCTIONS =====
-function toProperCase(str) {
-  return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-}
-
-// ===== AUTO-RUN ON EDIT (Optional) =====
-function onEdit(e) {
-  const sheet = e.source.getActiveSheet();
-  
-  // Only run if edit was in Raw Data sheet
-  if (sheet.getName() === RAW_SHEET_NAME) {
-    // Add small delay to let OSync finish writing
-    Utilities.sleep(2000);
-    cleanShopifyData();
-  }
-}
-
-// ===== MANUAL RUN FUNCTION =====
-function runCleaning() {
-  cleanShopifyData();
 }
