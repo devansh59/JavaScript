@@ -11,15 +11,105 @@ const PRODUCT_CODE_MAP = {
   'MPGI3000': 'Gut & Immunity+30gm',
   'MPGI100': 'Gut & Immunity+100gm',
   'MPPR1200': 'Protect',
-  'MPLM3000': 'Lean mass+',
+  'MPLM3000': 'Lean Mass+',
   'MPJD3000': 'Joint & Mobility+30gm',
-  'MPFC3000': 'Focus & calm 30gm',
+  'MPFC3000': 'Focus & Calm 30gm',
   'MPPK3000': 'Puppy/Kitten',
   'MPNBO240': "Nature's BugOff"
-  // Add more codes here after running analyzeProductData()
 };
 
-// ===== MAIN CLEANING FUNCTION WITH FALLBACK =====
+// ===== ITEM NAME MAPPING (for items without product codes) =====
+const ITEM_NAME_MAP = {
+  // Gut & Immunity variations
+  'Gut (Allergies) & Immunity +': 'Gut & Immunity+',
+  'Gut (Allergies) & Immunity': 'Gut & Immunity+',
+  'Gut & Immunity+': 'Gut & Immunity+',
+  'Gut & Immunity +': 'Gut & Immunity+',
+  'Gut & Immunity': 'Gut & Immunity+',
+  'Allergies & Immunity': 'Gut & Immunity+',
+  'Allergies & Immunity - Canine': 'Gut & Immunity+',
+  'Aller-G & Immunity': 'Gut & Immunity+',
+  'Gut & Immunity+ 500g': 'Gut & Immunity+100gm',
+  'Gut & Immunity + 500g': 'Gut & Immunity+100gm',
+  'Gut & Immunity - 120g': 'Gut & Immunity+100gm',
+  'G&I 100g': 'Gut & Immunity+100gm',
+  
+  // Joint & Mobility variations
+  'Joint & Mobility+': 'Joint & Mobility+',
+  'Joint & Mobility +': 'Joint & Mobility+',
+  'Joint & Mobililty+ (Recovery)': 'Joint & Mobility+',
+  'Joint & Mobility + (Recovery) - Equine': 'Joint & Mobility+',
+  'Joint & Detox (Recovery)': 'Joint & Mobility+',
+  'Joint & Detox': 'Joint & Mobility+',
+  'Joints & Repair': 'Joint & Mobility+',
+  'Joints & Recovery': 'Joint & Mobility+',
+  'Joints & Recovery - Canine': 'Joint & Mobility+',
+  'Joint & Mobility+ 500g': 'Joint & Mobility+500gm',
+  'Joint & Mobility+ 600g': 'Joint & Mobility+600gm',
+  
+  // Protect variations
+  'PROTECT': 'Protect',
+  'PROTECT - Disinfectant': 'Protect',
+  'Free PROTECT': 'Protect',
+  
+  // Lean Mass variations
+  'Lean Mass+': 'Lean Mass+',
+  'Lean Mass +': 'Lean Mass+',
+  'Lean Mass': 'Lean Mass+',
+  'Lean Mass - Canine': 'Lean Mass+',
+  'Lean Mass+ 100g': 'Lean Mass+100gm',
+  'Lean Mass - 100g': 'Lean Mass+100gm',
+  
+  // Focus & Calm variations
+  'Focus & Calm': 'Focus & Calm',
+  'Focus & Calm (replace GI)': 'Focus & Calm',
+  'Calm & Focused': 'Focus & Calm',
+  'Calming+': 'Focus & Calm',
+  'Calming': 'Focus & Calm',
+  'Calming - Canine': 'Focus & Calm',
+  
+  // Puppy/Kitten variations
+  'Puppy/Kitten Formula': 'Puppy/Kitten',
+  'Puppy Formula': 'Puppy/Kitten',
+  'Puppy/Kitten 100g': 'Puppy/Kitten 100gm',
+  
+  // Nature's BugOff variations
+  "Nature's BugOff": "Nature's BugOff",
+  "Nature's BugOff 1 Gal": "Nature's BugOff 1 Gal",
+  
+  // Other products (non-core)
+  'Black Soldier Fly Larvae (BSFL) - Dried': 'BSFL - Dried',
+  'Power & Endurance - Equine': 'Power & Endurance - Equine',
+  'Myco Pet Gift Card': 'Gift Card',
+  'Hemp Animal Bedding': 'Hemp Bedding',
+  
+  // Samples & Marketing Materials (exclude these)
+  'Puppy/Kitten Samples': 'EXCLUDE',
+  'Flyers + Magnets': 'EXCLUDE',
+  'Flyers': 'EXCLUDE',
+  'Magnets': 'EXCLUDE',
+  'WBS Show': 'EXCLUDE',
+  'Samples': 'EXCLUDE',
+  'PK Samples - 2g': 'EXCLUDE',
+  '2g samples - G&I': 'EXCLUDE',
+  'G&I Samples': 'EXCLUDE',
+  'Jars': 'EXCLUDE',
+  'Labels': 'EXCLUDE',
+  'Massager': 'EXCLUDE',
+  'Stack': 'EXCLUDE',
+  'Custom Capsules': 'EXCLUDE',
+  'Test product': 'EXCLUDE',
+  'FREE J&R 30g': 'EXCLUDE',
+  
+  // Fees (exclude these)
+  'CC Processing Fee': 'EXCLUDE',
+  'CC Fee with wholesale discount applied': 'EXCLUDE',
+  '4% CC Processing Fee': 'EXCLUDE',
+  'CC Fee': 'EXCLUDE',
+  'Shipping Weight for Additional Items': 'EXCLUDE'
+};
+
+// ===== MAIN CLEANING FUNCTION WITH INTELLIGENT MAPPING =====
 function cleanShopifyData() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -55,7 +145,7 @@ function cleanShopifyData() {
       productCode: headers.indexOf('Product code')
     };
     
-    // New headers with Product Code column
+    // New headers
     const newHeaders = [
       'Order ID',
       'Product Code',
@@ -81,11 +171,15 @@ function cleanShopifyData() {
       testOrders: 0,
       zeroOrders: 0,
       emptyRows: 0,
-      mappedProducts: 0,
-      unmappedProducts: 0,
-      noCodeProducts: 0,
+      mappedByCode: 0,
+      mappedByName: 0,
+      excluded: 0,
+      unmapped: 0,
       processed: 0
     };
+    
+    // Track unmapped items for reporting
+    const unmappedItems = new Set();
     
     // Track current order details for multi-line items
     let currentOrder = null;
@@ -161,54 +255,67 @@ function cleanShopifyData() {
         };
       }
       
-      // Process items (works for both first row and continuation rows)
+      // Process items
       if (items && currentOrder) {
         
+        const itemDetails = parseItem(items);
         let finalProductCode = '';
         let finalProductName = '';
+        let shouldInclude = true;
         
-        // ===== STRATEGY: Use product code if available, fallback to item name =====
+        // ===== INTELLIGENT MAPPING STRATEGY =====
+        
+        // 1. Try product code first
         if (productCode && PRODUCT_CODE_MAP[productCode]) {
-          // Product code exists and is mapped
           finalProductCode = productCode;
           finalProductName = PRODUCT_CODE_MAP[productCode];
-          stats.mappedProducts++;
-        } else if (productCode && !PRODUCT_CODE_MAP[productCode]) {
-          // Product code exists but not mapped - use item name
-          const itemDetails = parseItem(items);
-          finalProductCode = productCode;
+          stats.mappedByCode++;
+        }
+        // 2. Try item name mapping
+        else if (ITEM_NAME_MAP[itemDetails.productName]) {
+          const mappedName = ITEM_NAME_MAP[itemDetails.productName];
+          
+          // Check if this should be excluded
+          if (mappedName === 'EXCLUDE') {
+            stats.excluded++;
+            shouldInclude = false;
+          } else {
+            finalProductCode = productCode || 'MAPPED_BY_NAME';
+            finalProductName = mappedName;
+            stats.mappedByName++;
+          }
+        }
+        // 3. No mapping found - use original name
+        else {
+          finalProductCode = productCode || 'UNMAPPED';
           finalProductName = itemDetails.productName;
-          stats.unmappedProducts++;
-        } else {
-          // No product code - use item name
-          const itemDetails = parseItem(items);
-          finalProductCode = 'NO_CODE';
-          finalProductName = itemDetails.productName;
-          stats.noCodeProducts++;
+          stats.unmapped++;
+          unmappedItems.add(itemDetails.productName);
         }
         
-        const itemDetails = parseItem(items);
-        
-        const cleanedRow = [
-          currentOrder.id,
-          finalProductCode,
-          finalProductName,
-          itemDetails.price,
-          itemDetails.quantity,
-          currentOrder.customerName,
-          currentOrder.address.city,
-          currentOrder.address.province,
-          currentOrder.address.country,
-          currentOrder.total,
-          currentOrder.date,
-          currentOrder.email,
-          currentOrder.subtotal,
-          currentOrder.discount.amount,
-          currentOrder.discount.type
-        ];
-        
-        cleanedData.push(cleanedRow);
-        stats.processed++;
+        // Only add if not excluded
+        if (shouldInclude) {
+          const cleanedRow = [
+            currentOrder.id,
+            finalProductCode,
+            finalProductName,
+            itemDetails.price,
+            itemDetails.quantity,
+            currentOrder.customerName,
+            currentOrder.address.city,
+            currentOrder.address.province,
+            currentOrder.address.country,
+            currentOrder.total,
+            currentOrder.date,
+            currentOrder.email,
+            currentOrder.subtotal,
+            currentOrder.discount.amount,
+            currentOrder.discount.type
+          ];
+          
+          cleanedData.push(cleanedRow);
+          stats.processed++;
+        }
       }
     }
     
@@ -242,20 +349,30 @@ function cleanShopifyData() {
    • Test orders: ${stats.testOrders}
    • Zero-value: ${stats.zeroOrders}
    • Empty rows: ${stats.emptyRows}
+   • Excluded items: ${stats.excluded}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 Products:
-   • Mapped (standardized): ${stats.mappedProducts}
-   • Unmapped codes (using item name): ${stats.unmappedProducts}
-   • No code (using item name): ${stats.noCodeProducts}
+   • Mapped by code: ${stats.mappedByCode}
+   • Mapped by name: ${stats.mappedByName}
+   • Unmapped (kept original): ${stats.unmapped}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ Run analyzeProductData() to see unmapped products
+${unmappedItems.size > 0 ? '⚠️ ' + unmappedItems.size + ' unmapped items - check logs' : '✅ All items mapped!'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       `;
       
       Logger.log(summary);
       
+      if (unmappedItems.size > 0) {
+        Logger.log('\n⚠️ UNMAPPED ITEMS (using original names):');
+        Logger.log('─────────────────────────────────────────');
+        Array.from(unmappedItems).sort().forEach(item => {
+          Logger.log(`  • ${item}`);
+        });
+        Logger.log('\nAdd these to ITEM_NAME_MAP if needed.\n');
+      }
+      
       SpreadsheetApp.getActiveSpreadsheet().toast(
-        `Processed ${stats.processed} items. ${stats.unmappedProducts + stats.noCodeProducts} need mapping.`,
+        `Processed ${stats.processed} items. ${stats.unmapped} unmapped, ${stats.excluded} excluded.`,
         '✅ Data Cleaned',
         5
       );
@@ -271,7 +388,7 @@ function cleanShopifyData() {
   }
 }
 
-// ===== DIAGNOSTIC FUNCTION - RUN THIS TO SEE WHAT'S MISSING =====
+// ===== DIAGNOSTIC FUNCTION =====
 function analyzeProductData() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rawSheet = ss.getSheetByName(RAW_SHEET_NAME);
@@ -302,12 +419,11 @@ function analyzeProductData() {
     
     if (!items) continue;
     
-    // Parse item name (everything before last 2 parts which are price and quantity)
+    // Parse item name
     const itemParts = items.split(' ');
     const itemName = itemParts.slice(0, -2).join(' ');
     
     if (productCode) {
-      // Track code → item name mapping
       if (!productData[productCode]) {
         productData[productCode] = {
           itemNames: new Set(),
@@ -318,12 +434,10 @@ function analyzeProductData() {
       productData[productCode].itemNames.add(itemName);
       productData[productCode].count++;
       
-      // Track unmapped codes
       if (!PRODUCT_CODE_MAP[productCode]) {
         unmappedCodes.add(productCode);
       }
     } else {
-      // Items without product codes
       itemsWithoutCodes.push(itemName);
     }
   }
@@ -333,7 +447,7 @@ function analyzeProductData() {
   Logger.log('📊 PRODUCT DATA ANALYSIS');
   Logger.log('═══════════════════════════════════════════════════════\n');
   
-  // 1. Mapped Products (Currently Included)
+  // 1. Mapped Products
   Logger.log('✅ MAPPED PRODUCTS (Standardized Names):');
   Logger.log('─────────────────────────────────────────────────────');
   let mappedCount = 0;
@@ -348,22 +462,7 @@ function analyzeProductData() {
   });
   Logger.log(`Total mapped orders: ${mappedCount}\n`);
   
-  // 2. Unmapped Products (Using Item Name as Fallback)
-  if (unmappedCodes.size > 0) {
-    Logger.log('⚠️ UNMAPPED PRODUCT CODES (Using Item Name):');
-    Logger.log('─────────────────────────────────────────────────────');
-    let unmappedCount = 0;
-    Array.from(unmappedCodes).sort().forEach(code => {
-      Logger.log(`${code} - NOT IN MAPPING`);
-      Logger.log(`   Orders: ${productData[code].count}`);
-      Logger.log(`   Item names: ${Array.from(productData[code].itemNames).join(', ')}`);
-      Logger.log('');
-      unmappedCount += productData[code].count;
-    });
-    Logger.log(`Total unmapped orders: ${unmappedCount}\n`);
-  }
-  
-  // 3. Items without product codes
+  // 2. Items without codes
   if (itemsWithoutCodes.length > 0) {
     Logger.log('⚠️ ITEMS WITHOUT PRODUCT CODES:');
     Logger.log('─────────────────────────────────────────────────────');
@@ -375,7 +474,7 @@ function analyzeProductData() {
     Logger.log(`Total: ${itemsWithoutCodes.length}\n`);
   }
   
-  // 4. Summary
+  // 3. Summary
   Logger.log('═══════════════════════════════════════════════════════');
   Logger.log('📈 SUMMARY:');
   Logger.log('─────────────────────────────────────────────────────');
@@ -387,20 +486,6 @@ function analyzeProductData() {
   Logger.log(`Items without codes: ${itemsWithoutCodes.length}`);
   Logger.log('═══════════════════════════════════════════════════════\n');
   
-  // 5. Suggested additions to PRODUCT_CODE_MAP
-  if (unmappedCodes.size > 0) {
-    Logger.log('💡 SUGGESTED CODE TO ADD TO PRODUCT_CODE_MAP:');
-    Logger.log('─────────────────────────────────────────────────────');
-    Logger.log('Copy and paste this into your PRODUCT_CODE_MAP:\n');
-    Array.from(unmappedCodes).sort().forEach(code => {
-      const itemNames = Array.from(productData[code].itemNames);
-      const suggestedName = itemNames[0]; // Use first item name as suggestion
-      Logger.log(`  '${code}': '${suggestedName}',`);
-    });
-    Logger.log('\n');
-  }
-  
-  // Show toast notification
   SpreadsheetApp.getActiveSpreadsheet().toast(
     `Found ${unmappedCodes.size} unmapped codes, ${itemsWithoutCodes.length} items without codes. Check logs.`,
     '📊 Analysis Complete',
@@ -410,21 +495,11 @@ function analyzeProductData() {
 
 // ===== HELPER FUNCTIONS =====
 
-// Parse item string: "Joint & Mobility+ 54.99 1" → {productName, price, quantity}
 function parseItem(itemStr) {
-  // Remove extra spaces
   itemStr = itemStr.trim().replace(/\s+/g, ' ');
-  
-  // Split by space and work backwards
   const parts = itemStr.split(' ');
-  
-  // Last part is quantity
   const quantity = parts[parts.length - 1] || '1';
-  
-  // Second to last is price
   const price = parts[parts.length - 2] || '0.00';
-  
-  // Everything else is product name
   const productName = parts.slice(0, -2).join(' ');
   
   return {
@@ -434,11 +509,8 @@ function parseItem(itemStr) {
   };
 }
 
-// Parse address: "Middleton Nova Scotia   Canada" → {city, province, country}
 function parseAddress(addressStr) {
-  // Clean multiple spaces
   addressStr = addressStr.trim().replace(/\s+/g, ' ');
-  
   const parts = addressStr.split(' ');
   
   if (parts.length >= 3) {
@@ -456,7 +528,6 @@ function parseAddress(addressStr) {
   };
 }
 
-// Parse discount: "100.0 manual" → {amount, type}
 function parseDiscount(discountStr) {
   discountStr = discountStr.trim();
   
@@ -472,17 +543,14 @@ function parseDiscount(discountStr) {
   };
 }
 
-// Clean customer name: "  Linda Powers" → "Linda Powers"
 function cleanCustomerName(name) {
   return name.trim().replace(/\s+/g, ' ');
 }
 
-// Clean currency: "CAD86.17" → "86.17" or keep as is
 function cleanCurrency(currencyStr) {
   return currencyStr.trim();
 }
 
-// Clean date
 function cleanDate(dateValue) {
   if (!dateValue) return '';
   
@@ -491,7 +559,6 @@ function cleanDate(dateValue) {
   }
   
   if (typeof dateValue === 'string') {
-    // Handle ISO format: "2026-02-06T12:34:04-05:00"
     try {
       const date = new Date(dateValue);
       return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
