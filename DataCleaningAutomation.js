@@ -38,12 +38,11 @@ const ITEM_NAME_MAP = {
   'Joint & Mobility+': 'Joint & Mobility+',
   'Joint & Mobility +': 'Joint & Mobility+',
   'Joint & Mobililty+ (Recovery)': 'Joint & Mobility+',
-  'Joint & Mobility + (Recovery) - Equine': 'Joint & Mobility+',
-  'Joint & Detox (Recovery)': 'Joint & Mobility+',
-  'Joint & Detox': 'Joint & Mobility+',
   'Joints & Repair': 'Joint & Mobility+',
   'Joints & Recovery': 'Joint & Mobility+',
   'Joints & Recovery - Canine': 'Joint & Mobility+',
+  'Joint & Detox (Recovery)': 'Joint & Mobility+',
+  'Joint & Detox': 'Joint & Mobility+',
   'Joint & Mobility+ 500g': 'Joint & Mobility+500gm',
   'Joint & Mobility+ 600g': 'Joint & Mobility+600gm',
   
@@ -52,7 +51,7 @@ const ITEM_NAME_MAP = {
   'PROTECT - Disinfectant': 'Protect',
   'Free PROTECT': 'Protect',
   
-  // Lean Mass variations
+  // Lean Mass variations (CANINE ONLY - Equine excluded below)
   'Lean Mass+': 'Lean Mass+',
   'Lean Mass +': 'Lean Mass+',
   'Lean Mass': 'Lean Mass+',
@@ -60,7 +59,7 @@ const ITEM_NAME_MAP = {
   'Lean Mass+ 100g': 'Lean Mass+100gm',
   'Lean Mass - 100g': 'Lean Mass+100gm',
   
-  // Focus & Calm variations
+  // Focus & Calm variations (CANINE ONLY - Equine excluded below)
   'Focus & Calm': 'Focus & Calm',
   'Focus & Calm (replace GI)': 'Focus & Calm',
   'Calm & Focused': 'Focus & Calm',
@@ -78,12 +77,28 @@ const ITEM_NAME_MAP = {
   "Nature's BugOff 1 Gal": "Nature's BugOff 1 Gal",
   
   // Other products (non-core)
-  'Black Soldier Fly Larvae (BSFL) - Dried': 'BSFL - Dried',
-  'Power & Endurance - Equine': 'Power & Endurance - Equine',
   'Myco Pet Gift Card': 'Gift Card',
-  'Hemp Animal Bedding': 'Hemp Bedding',
   
-  // Samples & Marketing Materials (exclude these)
+  // ===== EXCLUDE: BLACK SOLDIER FLY PRODUCTS =====
+  'Black Soldier Fly - Oil': 'EXCLUDE',
+  'Black Soldier Fly Larvae - Powder Topper': 'EXCLUDE',
+  'Black Soldier Fly Larvae (BSFL) - Dried': 'EXCLUDE',
+  
+  // ===== EXCLUDE: HEMP & PET BEDS =====
+  'Hemp Animal Bedding': 'EXCLUDE',
+  'Pet Beds': 'EXCLUDE',
+  
+  // ===== EXCLUDE: EQUINE PRODUCTS =====
+  'Fore & Hind Gut': 'EXCLUDE',
+  '3Nerve': 'EXCLUDE',
+  'Nerve': 'EXCLUDE',
+  'FOAL - Equine': 'EXCLUDE',
+  'Lean Mass - Equine': 'EXCLUDE',
+  'Power & Endurance - Equine': 'EXCLUDE',
+  'Focus & Calm - Equine': 'EXCLUDE',
+  'Joint & Mobility + (Recovery) - Equine': 'EXCLUDE',
+  
+  // ===== EXCLUDE: SAMPLES & MARKETING MATERIALS =====
   'Puppy/Kitten Samples': 'EXCLUDE',
   'Flyers + Magnets': 'EXCLUDE',
   'Flyers': 'EXCLUDE',
@@ -101,7 +116,7 @@ const ITEM_NAME_MAP = {
   'Test product': 'EXCLUDE',
   'FREE J&R 30g': 'EXCLUDE',
   
-  // Fees (exclude these)
+  // ===== EXCLUDE: FEES =====
   'CC Processing Fee': 'EXCLUDE',
   'CC Fee with wholesale discount applied': 'EXCLUDE',
   '4% CC Processing Fee': 'EXCLUDE',
@@ -178,8 +193,9 @@ function cleanShopifyData() {
       processed: 0
     };
     
-    // Track unmapped items for reporting
+    // Track unmapped items and excluded items for reporting
     const unmappedItems = new Set();
+    const excludedItems = {};
     
     // Track current order details for multi-line items
     let currentOrder = null;
@@ -279,6 +295,12 @@ function cleanShopifyData() {
           if (mappedName === 'EXCLUDE') {
             stats.excluded++;
             shouldInclude = false;
+            
+            // Track excluded items
+            if (!excludedItems[itemDetails.productName]) {
+              excludedItems[itemDetails.productName] = 0;
+            }
+            excludedItems[itemDetails.productName]++;
           } else {
             finalProductCode = productCode || 'MAPPED_BY_NAME';
             finalProductName = mappedName;
@@ -362,6 +384,17 @@ ${unmappedItems.size > 0 ? '⚠️ ' + unmappedItems.size + ' unmapped items - c
       
       Logger.log(summary);
       
+      // Show excluded items
+      if (Object.keys(excludedItems).length > 0) {
+        Logger.log('\n🗑️ EXCLUDED ITEMS:');
+        Logger.log('─────────────────────────────────────────');
+        Object.keys(excludedItems).sort().forEach(item => {
+          Logger.log(`  • ${item}: ${excludedItems[item]} orders`);
+        });
+        Logger.log('');
+      }
+      
+      // Show unmapped items
       if (unmappedItems.size > 0) {
         Logger.log('\n⚠️ UNMAPPED ITEMS (using original names):');
         Logger.log('─────────────────────────────────────────');
@@ -462,16 +495,55 @@ function analyzeProductData() {
   });
   Logger.log(`Total mapped orders: ${mappedCount}\n`);
   
-  // 2. Items without codes
+  // 2. Items without codes - categorized
   if (itemsWithoutCodes.length > 0) {
-    Logger.log('⚠️ ITEMS WITHOUT PRODUCT CODES:');
-    Logger.log('─────────────────────────────────────────────────────');
     const uniqueItems = [...new Set(itemsWithoutCodes)];
+    
+    // Categorize items
+    const willBeIncluded = [];
+    const willBeExcluded = [];
+    const willBeUnmapped = [];
+    
     uniqueItems.forEach(item => {
       const count = itemsWithoutCodes.filter(i => i === item).length;
-      Logger.log(`${item} - ${count} orders`);
+      const itemInfo = `${item} - ${count} orders`;
+      
+      if (ITEM_NAME_MAP[item]) {
+        if (ITEM_NAME_MAP[item] === 'EXCLUDE') {
+          willBeExcluded.push(itemInfo);
+        } else {
+          willBeIncluded.push(itemInfo);
+        }
+      } else {
+        willBeUnmapped.push(itemInfo);
+      }
     });
-    Logger.log(`Total: ${itemsWithoutCodes.length}\n`);
+    
+    // Show included items
+    if (willBeIncluded.length > 0) {
+      Logger.log('✅ ITEMS WITHOUT CODES (Will be mapped):');
+      Logger.log('─────────────────────────────────────────────────────');
+      willBeIncluded.forEach(item => Logger.log(item));
+      Logger.log('');
+    }
+    
+    // Show excluded items
+    if (willBeExcluded.length > 0) {
+      Logger.log('🗑️ ITEMS WITHOUT CODES (Will be excluded):');
+      Logger.log('─────────────────────────────────────────────────────');
+      willBeExcluded.forEach(item => Logger.log(item));
+      Logger.log('');
+    }
+    
+    // Show unmapped items
+    if (willBeUnmapped.length > 0) {
+      Logger.log('⚠️ ITEMS WITHOUT CODES (Unmapped - will use original name):');
+      Logger.log('─────────────────────────────────────────────────────');
+      willBeUnmapped.forEach(item => Logger.log(item));
+      Logger.log('');
+    }
+    
+    Logger.log(`Total items without codes: ${itemsWithoutCodes.length}\n`);
   }
   
   // 3. Summary
@@ -482,12 +554,11 @@ function analyzeProductData() {
   Logger.log(`Mapped codes: ${Object.keys(PRODUCT_CODE_MAP).length}`);
   Logger.log(`Unmapped codes: ${unmappedCodes.size}`);
   Logger.log(`Orders with mapped products: ${mappedCount}`);
-  Logger.log(`Orders with unmapped products: ${unmappedCodes.size > 0 ? Array.from(unmappedCodes).reduce((sum, code) => sum + productData[code].count, 0) : 0}`);
   Logger.log(`Items without codes: ${itemsWithoutCodes.length}`);
   Logger.log('═══════════════════════════════════════════════════════\n');
   
   SpreadsheetApp.getActiveSpreadsheet().toast(
-    `Found ${unmappedCodes.size} unmapped codes, ${itemsWithoutCodes.length} items without codes. Check logs.`,
+    `Analysis complete. Check logs for details.`,
     '📊 Analysis Complete',
     10
   );
